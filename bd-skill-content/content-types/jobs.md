@@ -1,0 +1,205 @@
+# Jobs content-type protocol
+
+The router (`SKILL.md`) routed you here because the user wants to create job posts. Follow this file plus the shared protocol files.
+
+## Required reading first
+
+1. `../shared/METHODOLOGY.md`: universal protocol.
+2. `../shared/ANTI-SLOP.md`: voice + pattern bans + self-check.
+3. `../shared/URL-PATTERNS.md`: internal URL construction.
+4. `../shared/GEOCODING.md`: geocoding protocol (transliteration, geocode ladder, normalization).
+
+---
+
+## End-to-end runbook
+
+The user invoked the skill with a request like "create job posts on my site" or similar. They may have specified cities, occupations, categories, or limit. Execute the runbook steps in order. Once a step is resolved, move immediately to the next step. **Make only the tool calls the runbook steps specify and fill each message's pack per Rule: Search discipline — insurance fill is not an extra; improvised calls outside the steps and the fill rule are.** On per-job failure, continue to the next job.
+
+1. **Autonomy.** Per METHODOLOGY `Autonomy`: never ask; decide and proceed.
+2. **Site context discovery.** Run METHODOLOGY `Stage 1: Site context`.
+3. **Post-type discovery.** Run the `Post-type discovery` section.
+4. **Author resolution.** A pre-specified `user_id` in the request settles it — no call. Else run METHODOLOGY's `Author resolution (universal pattern)` against the resolved `data_id`.
+5. **Search round — the opening round stocks the run: call 5a and 5b in this ONE message of exactly six calls; the round's slots are exactly these. Later rounds fire 5a alone, new angles each time.**
+    - **5a. Five discovery queries** — the round's set, facets per `Source candidates` and METHODOLOGY `Stage 3: Source research` steps 2a-2b: `<occupation> hiring now`, `<occupation> job openings board`, `site:apply.workable.com <occupation>`, `site:boards.greenhouse.io <occupation>`, `site:jobs.lever.co <occupation>`. The Search round's score: how many results it surfaces showing a job title — ten candidates beat one.
+    - **5b. The create-fields call** — `getPostTypeCustomFields data_id=<resolved>` (or `system_name=<resolved>`) per `Post-type discovery`. Cache `post_category.choices` and `post_job.choices` — used at create time. Step 4's author probe, when the request names no author, rides this message as its seventh call — six calls, seven with the probe aboard; the probe never takes 5b's slot.
+6. **Pool-print turn — the message right after a search round's results arrive.** Walk every result of all five searches — and any fetched page in hand — one by one and cut the two keys: the role is the title segment containing the searched occupation (the first segment when none does); the employer is the URL's employer — a path or subdomain slug (`apply.workable.com/<employer>/`, `<employer>.recruitee.com`) or a careers page's own domain, any TLD — else the title's other segment (` at <employer>`, `<employer> - <role>`, `<role> - <employer>`), else the snippet's named company — a board's own name is never the employer; a board is any site listing many employers' jobs (Indeed, ZipRecruiter, Glassdoor). Nothing else cuts the keys — the result's own URL, title, and snippet are enough; its page is never fetched to cut them. Both keys cut and the role sharing a word with the searched occupation, the result is a candidate (the 60-day staleness gate applies per `Source candidates` — a candidate showing no posted-date is never blocked by it); no employer in the three homes, not one. Each reads as `Title - Company - v1 | v2 | v3` (its three variants, each 1-3 words, each a fingerprint bet on an existing post's title: the employer, an employer + role combo, and one more employer-anchored string that could fingerprint the title — a one-word employer `Bramblewood` hiring a nurse yields `Bramblewood,Bramblewood Nurse,Nurse Bramblewood`; an employer written `Smith, Jones & Co` yields `Smith`: a variant never spans a comma; matching is case-insensitive — case twins are one variant); the pool holds the first ten candidates in the order found — fewer only when the outputs and pages in hand show fewer. The Pool-print turn's score: how many candidates enter the pool — an omitted one costs a later round. The pool print opens with the count and prints one line per counted candidate — fewer lines than the count is an incomplete print. A round has ONE pool-print turn: every candidate's calls fire here — a second dedup turn on the same round's results is an incomplete first turn. Fire every candidate's dedup calls in this same message, on `listSingleImagePosts` only for the probes — call shapes per the `Dedup` section: every candidate's 3 variants in ONE title compound — 3 × N in element 1, the pool lines' variants merged as one comma-joined string — plus one venue probe per candidate; the venue leg never rides the title call. N candidates = N+1 calls in this one message; fewer is an incomplete turn.
+    - **6a. Shortfall queries — fewer than five pooled →** five new-angle WebSearch shapes ride this same message — untried facets on untried source classes: `site:jobs.ashbyhq.com <occupation>`, `site:jobs.smartrecruiters.com <occupation>`, `<occupation> jobs <city>`, `<adjacent-occupation> careers`, `site:governmentjobs.com <occupation>` — never repeats of spent queries. Fired now, read next round: a fully-duped pool re-pools from these yields at the next pool-print; the goal counts Step 7 survivors, never candidates at the read. Their message prints one insurance line citing each shape with its result count — `insurance: <shape> (<n results>) ×5` — a count only a fired query supplies; a line missing a count is an unfired query, and an unprinted insurance line is an incomplete turn.
+    - **6b. The compound and probes** — per the `Dedup` section: every keyed candidate from any search or fetch so far aboard. Once a candidate shows its title, its research stops until it survives Step 7. Results yielding a single keyed candidate are a pool of one — it prints as `1.` and fires its two calls the same. No candidates → the pre-fired yields pool at the next pool-print; with none in hand, return to Step 5.
+7. **Duplicate detection.** Stage 2's calls fired with Step 6's message — compare the returned rows and write the verdicts per METHODOLOGY `Stage 2: Duplicate detection` and the `Dedup` section's jobs-specific match criteria. Dupes drop from the candidate pool with no further calls; survivors advance to METHODOLOGY `Stage 3: Source research` steps 2c-2e verification — web calls travel in packs there: at least five to a message, spares preloaded, per `Rule: Search discipline` — each advancing survivor's application-page fetch (its prompt asks for the street address and application contact, plus the `Depth` line's cargo) and its Stage 5 citation sources ride those spare slots as inputs come ready, so Step 10 drafts from facts already in hand. No survivor → the pre-fired yields pool at the next pool-print (Step 6 again); with no pre-fired yields in hand, return to Step 5. Repeat until survivors meet the post goal. Survivors at or above the goal end the hunt — the top survivor advances to Step 8, the rest stand as backups.
+8. **Pre-create batch — the message right after verification completes for all survivors; this turn's only job: 8a, 8b, 8c, and 8d, all in this ONE message.** One survivor = six calls — its `poolImages` call, its dupe re-probe, and its four `Geocode ladder` tiers; a remote survivor with no location fires two — its `poolImages` call and dupe re-probe; fewer is an incomplete turn. Each additional survivor adds its own six (or two) to this same message. No other calls ride this turn (8d is written text in this same message, not a call). The six are three tools' calls — `poolImages`, `listSingleImagePosts`, `WebFetch` — born to fire together.
+    - **8a. Image selection.** The `poolImages` call fires in this batch message, never its own turn — per METHODOLOGY `Stage 5: Content manufacture (universal)` → `Image strategy`.
+    - **8b. Dupe re-probe (+ image dedup on the Steps 1-3 path).** Steps 1-3 image path: run METHODOLOGY `Stage 5: Content manufacture (universal)` → `Image strategy` dedup step here. `poolImages` path: the image is settled — re-probe only. Compose the final `post_title` once, to the field reference's title spec; then the `Dedup` section's venue probe fires with the survivor's verified employer core — verdict, consequence, and banking per METHODOLOGY `Stage 2: Duplicate detection` → `Pre-create dupe gate`.
+    - **8c. Geocode survivors only.** Geocode every non-duplicate candidate's address — their `Geocode ladder` tiers batched together as backups. Skip lat/lon only when every tier was empty. Print the resolved lat/lon into the internal-link inventory as a Pattern 3 location candidate (no new call). The resolved city/state is also a Pattern 6 member-directory location ingredient marked "pending gate" — a standalone location link (`/state`, `/state/city`) or combined with a member category (per URL-PATTERNS).
+    - **8d. Internal-link inventory (written in this same message, alongside 8a-8c's calls).** Emit the full inventory as a visible bullet list in this message — never held mentally — every candidate banked so far, expanded into every shape `Pattern 3 filter params` and `Slug hierarchy` form, none dropped. Each entry opens with a relative path — `/` plus at least one segment, never the site host, never bare `/`.
+9. **Category routing.** Run METHODOLOGY `Stage 4: Category routing`. Run the `Category routing` section for jobs-specific authorization.
+10. **Content manufacture.** Proceed straight from runbook Step 9 — no extra lookups. Follow METHODOLOGY `Stage 5: Content manufacture (universal)` with this file's `Content manufacture` jobs-specific inserts. Output the full post body as visible HTML text in this turn, then run the linking pass over that written body — placing every inventory URL whose phrase the body holds — and emit the finished linked body. Before emitting the finished body, walk every inventory row to the last, emitting exactly one `LINKED` or `UNPLACED` line per row — the linking is not complete before the last row is recorded. `LINKED: <url> — <the exact `<a href="…">…</a>` tag copied verbatim from the emitted body>` only when that tag is actually present in the emitted body; an inventory row with no such tag in the body is `UNPLACED: <url> — <reason>`. This is its own turn, before and separate from the create call.
+11. **Create the post** — fires ALONE in its own turn, after Steps 7-10 are complete for the candidate; nothing batches with a create. Set `post_content` to a character-for-character copy of Step 10's emitted body — never regenerated, redrafted, or recomposed here; if that exact copy is not in hand, do not create. Via `createSingleImagePost` per METHODOLOGY `Stage 6: Post creation`, with the field set in the `BD Jobs field reference` section.
+12. **Audit summary.** Run METHODOLOGY `Stage 7: Closing reply + JSON receipt`.
+
+---
+
+## Post-type discovery (runbook Step 3)
+
+Jobs are `type_of_feature=null` (same as blogs). `data_type=20` is the SCOPE (single-image post family — same as blog, event, coupon, etc.), not a discriminator. `data_id=9` is typical but NOT canonical — every site can be different; do not hard-code.
+
+Resolution order (try in order, stop at first match; server-side filter via `listPostTypes` — do NOT `getPostType` per-candidate):
+
+1. **User named a post type explicitly** (e.g., "post to my 'Open Positions' section"). Match the user's phrase against `data_name`, `system_name`, `form_name` on `listPostTypes`. Single confident match wins — skip the rest.
+
+2. **User didn't specify** — try in order, stop at first match:
+   a. `system_name=job_listing` (BD canonical)
+   b. `form_name=job_fields` (canonical jobs form)
+   c. `data_type=20` + semantic match on `data_name`/`system_name` against role-listing terms in any language (job, jobs, careers, positions, openings, vacancies, hiring, internships, empleos, trabajos, vacantes, emplois, offres d'emploi, stellenangebote, vagas, lavoro, oferty, etc. — case-insensitive; catches sites that renamed away from canonical)
+
+3. **EXCLUDE from any jobs resolution:**
+   - `community_article` / `form_name=member_article_fields` — member-written, not job postings
+   - `coupon`, `soundcloud_post`, `discussion`, `event`, `website_blog_article`, `property`, `product`, `photo_album`, `video`, `classified` — different content types
+
+**`type_of_feature` is NOT a jobs marker.** Reserved for events (`1`), properties (`2`), digital products (`0`). Jobs are `type_of_feature=null`.
+
+**Decision after resolution:**
+
+| Match count | Action |
+|---|---|
+| Zero | Skill cannot run — exit with the Stage 7 receipt; `shortfall_reason` says no jobs-capable post type exists. |
+| One | Use it — even a niche flavor (e.g. "Internships" as the site's only jobs-shaped type). Cache `data_id`, `data_name`, `system_name`, `form_name`, `feature_categories` — and write the **category ledger** line from this row, per `Stage 1: Site context` step 3. |
+| Multiple | Resolve per METHODOLOGY `Post-type disambiguation (universal pattern)` — never exit over ambiguity. |
+
+The user's explicit post-type pick always wins.
+
+**Resolution feeds `getPostTypeCustomFields`** — **runbook Step 5b carries the call.** Cache the response — it carries the live `post_category.choices` AND `post_job.choices` for this site (admin may have customized either). `getSingleImagePostFields` returns a stale fallback list for jobs — do NOT use it for `post_category` or `post_job` enums. Its output is used at create time.
+
+---
+
+## Source candidates (runbook Step 5)
+
+Per METHODOLOGY `Stage 3: Source research` (sub-step 2a), with one adjustment: the **Date sanity gate does NOT apply** to jobs — the **60-day staleness gate** is jobs' only date rule. Discovery is faceted and list-producing — derive the facets, then run the discovery ladder per **Rule: Search discipline**: one batched round of broad-faceted temporal (`<occupation> <location> hiring now`) + list-page vocabulary (`<location> <occupation> job openings board`); a shown posted-date within 60 days ranks a listing higher, its absence never drops one. Unless the user directs otherwise, prefer listings that fit the site's niche and carry strong local search intent, with public application info available.
+
+**Facets to derive:**
+- **Occupation/industry** — from the user's named occupations + audience/vertical from `getSiteInfo` + the resolved post type's `feature_categories` (cached).
+- **Location** — three modes, pick the one matching the user's request:
+  1. **User named a city/region** → use that verbatim ("Boston jobs," "jobs in Bangkok").
+  2. **User implied geographic scope but no specific city** ("local jobs," "jobs in my country," "near me") → scope to `getSiteInfo.primary_country`; pick locally-relevant cities for the country (not only cities where you have members). Use `listCities` ONLY when the user explicitly asks for jobs in member cities ("where I have members," "cities we cover"); never find member cities by listing members.
+  3. **User asked for a location-agnostic vertical** ("IT jobs," "remote copywriters," "freelance designers") → don't force a city facet at all; let the returned data drive it. The post's own geo fields are set from whatever the source record says (specific city → fill `post_location`/`lat`/`lon`/`country_sn`/`state_sn`; remote → omit those fields entirely).
+- Never bulk-list existing posts to infer geographic focus.
+
+**Source-country routing.** When picking from the source buckets, default to the site's `primary_country` (cached Stage 1) — the AI should prefer that country's national job portals, associations, and chambers. If the user's request names a different country, route there instead. The bucket names are examples — adapt to the active country.
+
+**What a qualifying source looks like when it appears in results** — recognition vocabulary, not a probe list:
+
+- **ATS public job pages** — globally used: Greenhouse (`boards.greenhouse.io/<company>`), Lever (`jobs.lever.co/<company>`), Ashby (`jobs.ashbyhq.com/<company>`), Workable (`apply.workable.com/<company>`), Recruitee, SmartRecruiters, BambooHR, Personio, Teamtailor. One company URL = many listings, ToS-clean. Country-agnostic.
+- **National + regional government job portals** — every country has them. US: USAJobs.gov + state `.gov/jobs`. UK: GOV.UK Find a Job. Canada: Job Bank. Australia: APSJobs.gov.au. EU: EURES. Singapore: MyCareersFuture. Thailand: ThaiJob.com (gov). Malaysia: JobsMalaysia.gov.my. India: NCS.gov.in. China: official municipal HR portals. For any other country, search `<country> national job portal site:.gov OR site:.<cc>`.
+- **Professional / trade association career centers** — pick associations native to the site's country and vertical. Medical: AMA (US), BMA (UK), CMA (Canada), AMA (Australia), MMA (Malaysia). Engineering: ASCE/IEEE (US), ICE (UK), Engineers Australia, IEM (Malaysia). Finance: AICPA/CFA Institute (global). Legal: state/provincial/national bar associations. Each country has equivalents; search `<vertical> association careers <country>`.
+- **Local chambers of commerce + workforce/employment boards** — every metro globally has a chamber-of-commerce-equivalent and a regional employment-services board with public local-employer listings (US: Workforce Development Boards; UK: Jobcentre Plus partner sites; EU: regional labour offices; Asia: regional manpower bureaus).
+- **University public career boards + library job portals** — country-agnostic; every city's main library and university typically lists local employer postings on a public page.
+
+**Never fetch or link:** Indeed, LinkedIn, ZipRecruiter, Glassdoor, Monster, SEEK, 51job (anti-scrape ToS — global aggregators all have it). Their results still count: one showing the dedup keys pools as an aggregator copy — keys from the snippet, harvest-only — and its canonical posting is reached per the canonical-posting rule after it survives.
+
+Tailor by vertical AND country: pick the country-native association + the country's national job portal first, then ATS pages of companies operating in that country.
+
+**60-day staleness gate.** During candidate harvest, read each candidate's source-page posted-date where the entry shows one, and reject candidates whose posted-date is >60 days old. A real on-topic listing in the correct location whose page shows no posted-date is valid — capture it and advance; the date orders the pool when present and never blocks a candidate.
+A single list-page `WebFetch` may return one job or dozens. Capture and print the pool per METHODOLOGY `Candidate pool discipline (universal pattern)`, take the top survivor after the verdicts, and drop-and-advance through the surviving list on failure — no re-fetch.
+
+Usable candidates pool per Step 6. No survivor after a round → return to Step 5 for the next five-query round, new angles each time. Only when every source is stale (>60 days), blocked, or wrong-location after the rounds → stop with the labelled verdict; a clean "no qualifying jobs found" run is a valid outcome (`shortfall_reason`). Pool 2 is for candidates that exist and fail per-candidate; a sweep-proven-dry market ends the run.
+
+The post's outbound link is the canonical posting; an aggregator copy is harvest-only. The copy carries the probe keys — job reference, poster name: after its `no match - survives` verdict, one reference search, then one `site:` probe on the poster's domain — each riding its message's pack — reaches the canonical posting. Prefer the candidate whose canonical posting is already verified live. Unreachable → use the copy's application contact per `How to apply` (a generic careers page qualifies only there), or drop per `URL liveness gate`.
+
+---
+
+## Dedup (runbook Step 7)
+
+Per METHODOLOGY `Stage 2: Duplicate detection`. Jobs-specific match criteria:
+- Title: semantic match (the role, e.g. "Senior Marketing Manager").
+- Company: same company (`post_venue`) semantic match.
+- Location: same city.
+
+Distinctive phrases = employer names, never bare role titles. Title + company + location together decide each row, so multi-location employers dedup per location, not per brand. Probes carry the snippet keys — employer variants alone; location is never a variant. Location decides at the verdicts: returned rows carry `post_venue` and `post_location` — a title+company match splits on location there, and a candidate whose city is not yet shown pends its verdict to survivor verification. `total` exceeds the returned row count → re-run once with the candidate's most distinctive employer fragment, or its city, as the phrase. A company, city, or title that changes at verification re-probes. Retrieval fires as: `listSingleImagePosts property=["post_title","data_id"] property_operator=["contains","eq"] property_value=["<every pooled candidate's variants as ONE CSV string>","<the resolved jobs data_id>"] limit=50 fields_only="post_id,post_title,post_status,post_filename,post_venue,post_location"` — every retrieval call carries the same `fields_only`; the arrays stay two-and-two. Element 1 carries exactly 3 × N variants — per candidate: the employer, an employer + role combo, and one more distinctive fingerprint; an omitted variant saves a token and ships a dupe. Plus one venue probe per candidate, batched in the same turn — the employer core against the company field: `listSingleImagePosts property=["post_venue","data_id"] property_operator=["contains","eq"] property_value=["<employer core>","<the resolved jobs data_id>"] limit=50` with the same `fields_only` — a fully retitled dupe still carries its company in `post_venue`. Its verdict line cites the candidate's company: `no match (title + venue: Bramblewood) - survives` — one verdict line per pool line; a location-split verdict cites the city that decided it.
+
+Date is NOT a dedup axis (jobs don't have a freshness-comparable date field).
+
+---
+
+## Geocoding (runbook Step 8c)
+
+Run on survivors only (candidates that passed runbook Step 7 dedup). Follow `../shared/GEOCODING.md` end-to-end: transliteration, geocode ladder, `Extraction prompt`, `Rules`, normalization.
+
+For jobs, `post_venue` = company name, so `Geocode ladder` tier 1 (`q="<company>, <city>, <state-name>"`) only hits if the geocoder has the company's headquarters indexed; tiers 2-4 (street → city-only) carry the load more often.
+
+---
+
+## Image selection (runbook Step 8a)
+
+**Jobs-specific Pexels search topics:** occupation + setting (`"office desk professional"`, `"warehouse worker operations"`, `"nurse hospital ward"`, `"construction site engineer"`, `"teacher classroom"`). They are the topical anchor for METHODOLOGY `Image strategy`'s **Axes** table phrases. NEVER use Pexels for what looks like a company logo — feature image is generic occupation/setting.
+
+## Category routing (runbook Step 9)
+
+Per METHODOLOGY `Stage 4: Category routing`. Jobs route via the **category ledger** (written at `Stage 1: Site context` step 3) exactly as every type does — Stage 4 routing and the Pattern 3 `category[]` link both use the resolved ledger value. The `post_category` create field is the one exception: it sends the cached `getPostTypeCustomFields.post_category.choices` key matching that resolved value, VERBATIM including any leading whitespace from the BD CSV-split quirk.
+
+User-specified default category in the request → every job in the run goes to that category (must match a cached `post_category` `choices` key; else route per Stage 4).
+
+---
+
+## Content manufacture (runbook Step 10)
+
+Follow METHODOLOGY `Stage 5: Content manufacture (universal)` — its `Voice`, `Body shape (universal)`, `Action CTA (universal)`, `Bullets (universal)`, `Section headings (universal)`, `Depth (universal)`, and `Internal links (universal)` — this is a job post. Jobs-specific inserts:
+
+**Voice examples:** facts carry their own subjects ("Pay ranges from $22 to $29 an hour"), the record-noun an ordinary subject named — the employer or the role ("A US Soccer D license is required", "The head-coach role plans weekly training"); light-verb bans; the subject slot may be candidates, the employer, or the role by name; settled-knowledge shape "The Cloverdale coach role pays $3,500 a season", "Weekend classes begin at 9am."; a joined pair "The studio limits classes to four, so a coach works with each player directly"; a fact the record lacks is silently absent, never reported missing. Verified, never invented: pay, terms, this employer's numbers. Domain to develop: what the work involves as checkable operational facts (tasks, tools, reporting line, schedule), what the role grows into, the onboarding or certification steps it requires, and the local workplace setup and reporting structure — operational specifics, never market commentary.
+
+**Intro fact list:** lead with the job title and role, then employment type, who's hiring, the city, pay (if known), what the work is, and who it's for.
+
+**CTA:** button verb "apply"; when an application or official job information URL is known.
+
+**Bullets:** core facts = the role, employer, location, pay, and employment type; a later enumerating section's `<ul>` = responsibilities, qualifications, formats, non-wage compensation.
+
+**Section headings:** the job's own facts, work, or requirements — a schedule or season section's heading names the dates, days, or hours themselves; banned dimension labels = Setting, Overview, Details, Background, Responsibilities, Requirements, Benefits, About.
+
+**Depth:** dimensions = the company's story, its own numbers, responsibilities, requirements, non-wage compensation, pay specifics, the workplace and team context; confident-knowledge dimensions = what the role involves, what the hire grows into, who the employer is and what they are about, the onboarding, certification, or clearance steps the role requires, and the local workplace setup and reporting structure — develop down into operational specifics, never out into the national market or generic career paths; record specifics = pay, terms, this employer's numbers — a posted or published date is a research signal only, never a body or bullet fact; fetch a known application or official listing URL before drafting for that cargo plus responsibilities and qualifications alongside the logistics; stated bare as the job's own fact.
+
+**How to apply** — a known URL rides the CTA and appears nowhere else in the post, not in the intro, a bullet, or a `How to apply` section; application by email or phone surfaces in a closing `How to apply` section as plain links riding the address or contact name in a sentence about applying.
+
+Jobs get category, location (`lat`+`lng`+`location_value`+`location_type=locality`) filter dimensions. No date filter for jobs.
+
+---
+
+## BD Jobs field reference (runbook Step 11)
+
+What `createSingleImagePost` receives.
+
+### Required
+
+| Field | Value |
+|---|---|
+| `data_type` | `20` (single-image classification, always for jobs) |
+| `data_id` | resolved jobs post-type id from runbook Step 3 |
+| `post_title` | **Graceful-degradation ladder, ~54 char cap.** Use a colon `:` as the primary separator (BD's slugifier handles colons cleanly — em dashes produce ugly `%E2%80%94` URL encoding). Never two colons in a single title — if the role name itself contains a colon, switch to "at"/"in" prose. Title+Company+City → Title+Company → Title+City → Title (+ employment type as fallback parenthetical). Adjust to fit the cap: drop city first, then company, then fall back to title-only. Examples: `"Marketing Manager: Bramblewood in Austin"` (full), `"Marketing Manager: Bramblewood"` (no city fits), `"Marketing Manager in Austin"` (no company source), `"Marketing Manager (Full-Time)"` (title-only fallback). Plain text, no HTML, no commas. |
+| `post_status` | `0` (draft, default) or `1` (publish, only if user explicitly authorized) |
+| `user_id` | resolved author from runbook Step 4 |
+
+### Fields to fill (each from research, never invented — leaving it empty is the failure)
+
+Universal field rules in **METHODOLOGY `Universal post fields`** (post_image, post_live_date, post_meta_title length, post_meta_description length, post_meta_keywords). `post_category`: send the cached choices key matching the resolved ledger category, verbatim (keep any leading whitespace from the BD CSV split) — as raw text with a literal `&`, never the `&amp;` entity form it takes inside a body href (a `Pattern 3 category[]` link URL-encodes it, but the `post_category` field value does not). Universal tags rule in **METHODOLOGY `Tags`**. Jobs-specific fields and examples:
+
+| Field | Jobs-specific note |
+|---|---|
+| `post_content` | Assembled HTML body per "Content manufacture" — load-bearing facts up front (e.g. role + employment type + company + location), responsibilities + qualifications + requirements bullets. |
+| `post_venue` | **Always pass the hiring employer's name; never OMIT** (BD helpText: "Company name"). The employer's exact name, as named in the title. Examples: `"Bramblewood"`, `"Loudoun County Government"`. |
+| `post_start_date` | Required. The future apply-by date — application close date, deadline, start date, and similar are all this one date. Else identical to `post_live_date`. `YYYYMMDDHHmmss` (14 digits). A date listed without a clock time → `000000`. |
+| `post_url` | Never sent — the application URL lives in post_content's CTA; only an explicit user request fills it. |
+| `post_promo` | The stated salary or hourly rate — a plain decimal number, no currency symbol, no commas. Hourly source → `14.50`; annual source → `70000.00`. Do not convert between hourly and annual. On a salary range, use midpoint of low+high, rounded to two decimals. **Send `post_promo` (BD back-fills `post_price`); sending `post_price` alone leaves `post_promo` null.** OMIT on "commensurate" / "DOE" / "competitive" / missing or a zero/`$0.00` range — never fabricate; a passed `0` renders as a literal `$0.00` tag. |
+| `post_job` | **Always pass a value; never OMIT.** Map source text case-insensitive against cached `post_job.choices` (Step 3). Pick the closest semantic match ("full time/FT" → live full-time choice; "intern" → internship; "contract/contractor" → contract-equivalent; etc.). On ambiguous or absent source, default to the live choice meaning "Full-Time". |
+| `post_category` | On `Category verdict: NONE` the create call carries no post_category field. Otherwise pull from cached `getPostTypeCustomFields.post_category.choices` (Step 3). NOT from `getSingleImagePostFields` (returns stale fallback for jobs). Pass the `key` VERBATIM including any leading whitespace from the BD CSV-split quirk. |
+| `post_location` | The display address — full street when known, else city/state (the string that geocoded, e.g. `"Denver, CO"`); lat/lon are the map coordinates. A multi-location record pins the post to ONE location — the location the post's own apply URL names; else the primary or first-listed — for the title, location, and geocode; the other locations are body facts only. Do NOT prepend the company name (already in `post_venue`). Remote with no location: OMIT. |
+| `lat` | Latitude float (from the geocoder, skip only if every tier was empty). |
+| `lon` | Longitude float (from the geocoder, skip only if every tier was empty). |
+| `country_sn` | ISO country code from the geocoder. |
+| `state_sn` | State code from the geocoder. |
+| `post_meta_title` | Type-specific example: `"Senior Marketing Manager Full-Time Position at Bramblewood in Downtown Austin, Texas"` — occupation + employment type + company + city, plus a searcher's pairing term (salary, hiring, apply) where natural, expanded from the shorter `post_title`. |
+| `post_meta_description` | Descriptive prose: role + key responsibility + location + employment type, one sentence (e.g. "Bramblewood is hiring a Senior Marketing Manager in Austin, TX to lead B2B SaaS brand strategy. Full-time, hybrid."). Apply URL/email/phone stays in the body's `How to apply` section, NOT in the meta description — Google strips URLs from SERP snippets and meta descriptions should read as natural prose. |
+| `post_meta_keywords` | Same exact CSV as `post_tags`. |
+
+### Do NOT pass
+
+- `post_expire_date` — BD job theme doesn't read it for auto-hide. Staleness discipline lives at the 60-day source-side gate.
+- `auto_geocode` — skill sets `lat`/`lon` itself; never pass this.
+- `post_url` — never pass unless the user requests it by name.
+- `revision_timestamp` — BD-managed.

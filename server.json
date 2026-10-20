@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.brilliantdirectories/brilliant-directories-mcp",
+  "description": "Official MCP server for Brilliant Directories — manage members, posts, leads, reviews, and more.",
+  "repository": {
+    "url": "https://github.com/brilliantdirectories/brilliant-directories-mcp",
+    "source": "github"
+  },
+  "version": "6.58.612",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "brilliant-directories-mcp",
+      "version": "6.58.612",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "BD_API_KEY",
+          "description": "Your Brilliant Directories API key. Generate one in BD Admin → Developer Hub → Generate API Key.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "BD_SITE_URL",
+          "description": "Your BD site URL, e.g. https://yoursite.com (BD_API_URL is also accepted as a legacy alias).",
+          "isRequired": true,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "bd",
+  "version": "1.1.0",
+  "category": "productivity",
+  "description": "Brilliant Directories integration. Manage members, posts, leads, reviews, web pages, redirects, email templates, forms, menus, tags, widgets, and post-type configurations on any Brilliant Directories website via the public hosted MCP at brilliantmcp.com. Bundles growth-automation skills (/bd:events researches local events and creates SEO-rich event posts; more skills coming).",
+  "author": {
+    "name": "Brilliant Directories",
+    "url": "https://github.com/brilliantdirectories"
+  },
+  "homepage": "https://www.brilliantdirectories.com",
+  "repository": "https://github.com/brilliantdirectories/brilliant-directories-mcp",
+  "license": "MIT",
+  "keywords": [
+    "brilliant-directories",
+    "membership",
+    "directory",
+    "mcp",
+    "model-context-protocol",
+    "cms",
+    "crm"
+  ]
+}

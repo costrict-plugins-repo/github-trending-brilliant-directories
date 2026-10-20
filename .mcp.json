@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "brilliant-directories": {
+      "type": "http",
+      "url": "https://brilliantmcp.com",
+      "headers": {
+        "X-Api-Key": "${BD_API_KEY}",
+        "X-BD-Site-URL": "${BD_SITE_URL}"
+      }
+    }
+  }
+}

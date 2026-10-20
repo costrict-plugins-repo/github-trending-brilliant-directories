@@ -1,0 +1,11 @@
+# Blog Publishing Routine
+
+Connect to my Brilliant Directories site MCP and run the `bd-skill-content` skill to autonomously create blog posts.
+
+Create exactly:
+
+- COUNT: `1` blog post(s)
+- PUBLISH STATUS: `post_status=1`
+- AUTHOR: `user_id=1`
+
+Pick topics that fit my niche and intersect with my categories; balance long-tail evergreen SEO value with deeper niche perspectives and high-search-intent topical authority.

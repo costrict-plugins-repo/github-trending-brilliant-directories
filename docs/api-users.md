@@ -1,0 +1,265 @@
+# BD API — Users Endpoints
+_Source: https://support.brilliantdirectories.com/support/solutions/articles/12000108047_
+
+**Related support articles:**
+- https://support.brilliantdirectories.com/support/solutions/articles/12000091105 (How to Edit Member Data with API Calls)
+- https://support.brilliantdirectories.com/support/solutions/articles/12000103947 (Users API — How to Manage Users with API Calls)
+
+## Authentication
+- Header: `X-Api-Key: {your-api-key}`
+- Verify: `GET /api/v2/token/verify`
+- Rate limit: 100 req/60s (max 1,000/min configurable)
+
+## Pagination
+- `page` (cursor token), `limit` (default 25, max 100)
+- Response: `total`, `current_page`, `total_pages`, `next_page`, `prev_page`, `message[]`
+
+## Filtering (all list endpoints)
+- `property` / `property[]` — field name(s)
+- `property_value` / `property_value[]` — value(s)
+- `property_operator` / `property_operator[]` — `=`, `LIKE`, `>`, `<`, `>=`, `<=`
+- `order_column` + `order_type` (ASC/DESC)
+
+## Field Discovery
+- `GET /api/v2/user/fields` — returns `[{ "key": "first_name", "label": "first_name", "required": 0 }, ...]`
+
+## Profile URL — how to get a member's public profile link
+
+Every member record has a `filename` field. This is the **complete relative URL path** for their public profile (not just a slug). To get the full profile URL, concatenate the site domain with the `filename` value:
+
+```
+profile_url = site_domain + "/" + user.filename
+```
+
+**Example:**
+- Site: `https://yoursite.example.com`
+- User `filename`: `united-states/monterey-park/doctor/jane-doe-m-d`
+- Full URL: `https://yoursite.example.com/united-states/monterey-park/doctor/jane-doe-m-d`
+
+**DO NOT** guess prefixes like `/business/`, `/profile/`, `/member/`, `/listing/`. BD's server-side router uses `filename` verbatim — whatever path is stored there is what resolves. The path format varies per site based on admin settings (some sites use pretty URLs with country/state/city/category segments; others use flat slugs), but the API consumer never needs to care: **just concatenate domain + filename and the URL works.**
+
+## Image imports — when creating or updating users with external image URLs
+
+The user schema has three image-URL fields: `profile_photo`, `logo`, `cover_photo`. By default, BD **stores whatever URL you pass as-is** — if you pass `https://example.com/scraped-logo.png`, that exact URL is used when rendering the member profile. If that host ever goes down, the image breaks.
+
+To make BD **fetch the external image and save it locally** to your site's storage, set `auto_image_import=1` on create or update. This is the right default for:
+- Web-scrape → BD import flows (like adding external business listings)
+- CSV imports from external sources
+- Cross-site migrations
+
+**Example — creating a user with a scraped logo, locally hosted after create:**
+
+```
+POST /api/v2/user/create
+{
+  "email": "info@elevatedwellness.com",
+  "password": "...",
+  "subscription_id": 1,
+  "logo": "https://source-site.com/images/logo.png",
+  "auto_image_import": "1"
+}
+```
+
+After the API returns success, BD asynchronously downloads the image and replaces the `logo` field with the local filename. Processing delay: a few minutes. Skip `auto_image_import=1` only when the user explicitly asks to keep the external URL reference (e.g., using a CDN they control).
+
+---
+
+## Operational rules (from support article 12000091105)
+
+### Email notifications
+- `send_email_notifications=1` on `createUser` triggers the welcome email (based on the membership plan's configured email). Default: off — API creates are silent.
+
+### Uniqueness constraints
+- `email` uniqueness depends on the site setting `allow_duplicate_member_emails`:
+  - Setting OFF (default for most sites): BD rejects duplicate `email` on create with a validation error.
+  - Setting ON: duplicate `email` values are accepted and stored. Identical `email` + `password` pairs are also accepted — BD does NOT do an extra uniqueness check on the pair.
+  - The setting is not exposed via API. For idempotent import pipelines: call `listUsers` with `property=email&property_value=<email>` before create and check for existing records, OR attempt the create and handle a rejection by falling back to `updateUser`.
+- `token` (when supplied) must be exactly 32 alphanumeric characters AND unique across all members.
+
+### Validation behaviors
+- URL fields (`website`, `booking_link`, `blog`, `facebook`, `twitter`, `linkedin`, `instagram`, etc.) are validated on write; invalid formats are silently skipped (not rejected — the rest of the payload still saves). Must start with `http://` or `https://`.
+- Category/service NAME references in any field should be wrapped in single quotes (e.g. `'25-30'`, `'Cosmetic Dentistry'`) to avoid parser confusion on dashes/spaces.
+
+### Prerequisites
+- `subscription_id` MUST reference an existing membership plan (from `listMembershipPlans`).
+- Categories do NOT need to exist beforehand on `createUser` — see "Category handling" below.
+
+### Category handling — IDs and NAMES both work (verified live 2026-04-18)
+
+BD accepts BOTH numeric IDs and string names for category/service fields. Source: `user.php:1840-1940`.
+
+#### Top-level category (profession) — pick ONE
+
+- `profession_id` — numeric; must reference an existing row in `list_professions`.
+- `profession_name` — OR pass the name as a string; BD looks it up in `list_professions.name`. If the name doesn't exist, it's auto-created on `createUser` (always) or on `updateUser` only when `create_new_categories=1` is also passed.
+
+**`profession_id` (or `profession_name`) is REQUIRED when you pass `services`.** The service lookup is scoped under the parent profession; without it, service relationships fail silently (per `user.php:1876`).
+
+#### Sub-categories — `services` parameter formats
+
+The `services` parameter is a comma-separated string with 4 supported formats. **Do NOT mix IDs and names in the same call** — pick one or the other:
+
+| Format | Example | What it creates |
+|---|---|---|
+| Single sub by ID | `services="1823"` | One sub-category relation |
+| Single sub by name | `services="PVC repair"` | One sub-category relation |
+| Multiple subs | `services="PVC repair,Water heater"` | Two sub-category relations |
+| Multiple subs (IDs) | `services="1823,1824,1825"` | Same, but by ID (faster — skips name lookups) |
+| Sub + sub-sub via `=>` | `services="Honda=>2022"` | Creates the sub "Honda" AND the sub-sub "2022" under it |
+| Multiple sub-subs | `services="Honda=>2022,Honda=>2023"` | Two sub-subs under "Honda" |
+| Mixed subs and sub-subs | `services="Honda=>2022,Toyota,Ford=>2024"` | "Honda" with sub-sub "2022", plain "Toyota", "Ford" with sub-sub "2024" |
+
+**`=>` (sub-sub) syntax rules:**
+- Left side: sub-category — looked up by name OR ID in `list_services`
+- Right side: sub-sub-category — **looked up by NAME ONLY** (no ID support on the right side), under the left-side's `master_id`
+- Sub-sub auto-create requires the same rules as regular auto-create (see table below)
+
+**Whitespace:** spaces around commas are trimmed automatically (`user.php:1854`). `services="Honda, Toyota"` works the same as `services="Honda,Toyota"`.
+
+#### Auto-create behavior — DIFFERS between create and update
+
+| Scenario | Auto-create unknown names? |
+|---|---|
+| `createUser` with any unknown name (profession, sub, or sub-sub) | ✅ **ALWAYS YES.** Hardcoded `create_new_categories = true` inside `createActions()` — cannot be disabled on create. |
+| `updateUser` with unknown name, WITHOUT `create_new_categories=1` | ❌ **Silently ignored.** The unknown name is dropped, no error raised. |
+| `updateUser` with unknown name + `create_new_categories=1` | ✅ YES. Missing sub / sub-sub categories are created under the member's profession. |
+
+#### Destructive side effect — changing `profession_id`
+
+**Changing `profession_id` on `updateUser` wipes all existing service (sub-category) relations for that member** (per `user.php:1832`). If you're moving a member to a new top-level category and want to preserve their sub-categories, re-send the full `services` list on the same `updateUser` call.
+
+#### Worked examples
+
+```
+# Simplest: create a member under a new profession with 2 subs (all auto-created)
+POST /api/v2/user/create
+  email=...
+  password=...
+  subscription_id=1
+  profession_name="Plumber"
+  services="PVC repair,Water heater"
+
+# Using existing IDs (faster, no name lookups)
+POST /api/v2/user/create
+  ...
+  profession_id=5
+  services="1823,1824,1825"
+
+# Full 3-tier (profession + sub + sub-sub) in one call
+POST /api/v2/user/create
+  ...
+  profession_name="Auto Dealer"
+  services="Honda=>2022,Honda=>2023,Toyota=>2022"
+
+# Update to add a new sub (pre-existing profession — names auto-create only with flag)
+PUT /api/v2/user/update
+  user_id=42
+  profession_id=5
+  services="PVC repair,Water heater,Drain cleaning"   # "Drain cleaning" is new
+  create_new_categories=1
+
+# Moving member to a different profession — re-send services to avoid wiping
+PUT /api/v2/user/update
+  user_id=42
+  profession_id=7                                     # changing from 5 to 7 wipes old services
+  services="Honda=>2022,Toyota"                       # re-declare under new profession
+```
+
+#### Quick reference
+
+| Need | Minimum fields |
+|---|---|
+| Add one sub-category by ID | `profession_id` + `services="<id>"` |
+| Add one sub-category by name | `profession_id` (or `profession_name`) + `services="<name>"` |
+| Add multiple subs | `services="a,b,c"` (all IDs OR all names) |
+| Add sub-sub under existing sub | `services="parent=>child"` |
+| Add sub-subs under multiple subs | `services="p1=>c1,p2=>c2,p3"` (mix is fine) |
+| Auto-create unknown names on update | add `create_new_categories=1` |
+| Preserve services when changing top category | re-send `services` in the same update call |
+
+---
+
+## Endpoints
+
+### 1. List Users
+`GET /api/v2/user/get`
+
+Supports pagination, filtering, sorting.
+
+**Response:** `{ "status": "success", "total": 84, "current_page": 1, "total_pages": 4, "next_page": "...", "message": [{ user objects }] }`
+
+### 2. Get Single User
+`GET /api/v2/user/get/{user_id}`
+
+**Response:** Same structure, `message` array with 1 item.
+
+### 3. Create User
+`POST /api/v2/user/create`
+
+**Required:** `email`, `password`, `subscription_id`
+**Optional:** `first_name`, `last_name`, `company`, `phone_number`, `city`, `state_code`, `country_code`
+
+**Response:** `{ "status": "success", "message": { user object with user_id } }`
+
+### 4. Update User
+`PUT /api/v2/user/update`
+
+**Required:** `user_id`
+**Optional:** Any user field + special params:
+- `member_tag_action` (1) + `member_tags` (comma-separated IDs)
+- `credit_action` (add/deduct/override) + `credit_amount`
+- `images_action` (remove_all/remove_cover_image/remove_logo_image/remove_profile_image)
+- `services` (category=>service1,service2)
+- `auto_geocode` (1)
+
+**Response:** `{ "status": "success", "message": { updated user object } }`
+
+### 5. Delete User
+`DELETE /api/v2/user/delete`
+
+**Required:** `user_id`
+**Optional:** `delete_images` (1)
+
+**Response:** `{ "status": "success", "message": "user record was deleted" }`
+
+### 6. Search Users
+`POST /api/v2/user/search`
+
+**Params:** `q` (keyword), `pid` (category), `tid` (sub-category), `ttid` (sub-sub-category), `address`, `sort` (reviews/name ASC/name DESC/last_name_asc/last_name_desc), `page`, `limit`, `dynamic` (1), `output_type` (array/html)
+
+### 7. User Login
+`POST /api/v2/user/login`
+
+**Required:** `email`, `password`
+**Response:** `{ "status": "success", "message": "credentials are valid" }`
+Note: Does NOT return profile data — use GET /api/v2/user/get after.
+
+### 8. User Transactions (billing invoice history)
+`POST /api/v2/user/transactions`
+**MCP tool:** `getUserTransactions`
+
+**Required:** `user_id` (POST body)
+
+Returns the member's billing transaction history (invoices). Read-only. Backed by BD's WHMCS billing integration.
+
+**Response shape:** `{ status: "success", message: { total, invoices: [...] } }`
+
+Each invoice object includes: `id`, `invoicenum`, `date`, `duedate`, `datepaid`, `subtotal`, `credit`, `tax`, `total`, `status` (e.g. `Paid`, `Unpaid`), `paymentmethod`, and an `items` array with per-line-item detail (`description`, `amount`, `type`, `relid`).
+
+**Note:** response is an object with `invoices` as an array — NOT a flat list. Iterate `message.invoices`, not `message`.
+
+### 9. User Subscriptions (membership-plan history)
+`POST /api/v2/user/subscriptions`
+**MCP tool:** `getUserSubscriptions`
+
+**Required:** `user_id` (POST body)
+
+Returns the member's subscription / membership-plan history. Read-only. Backed by BD's WHMCS billing integration.
+
+**Response shape:** `{ status: "success", message: { total, subscriptions: [...] } }`
+
+Each subscription object includes: `id`, `userid`, `packageid` (the membership plan — `subscription_id` on the user record), `regdate`, `nextduedate`, `billingcycle` (`Monthly`, `Yearly`, etc.), `paymentmethod`, `amount`, `domainstatus` (`Active`, `Cancelled`, `Pending`, etc.), `firstpaymentamount`, `notes`.
+
+**Note:** response is an object with `subscriptions` as an array — NOT a flat list. Iterate `message.subscriptions`.
+
+**Required:** `user_id`

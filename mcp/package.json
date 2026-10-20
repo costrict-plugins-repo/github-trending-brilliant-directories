@@ -1,0 +1,59 @@
+{
+  "name": "brilliant-directories-mcp",
+  "mcpName": "io.github.brilliantdirectories/brilliant-directories-mcp",
+  "version": "6.58.612",
+  "description": "Official MCP server for Brilliant Directories — manage members, posts, leads, reviews, and more.",
+  "main": "index.js",
+  "bin": {
+    "brilliant-directories-mcp": "index.js"
+  },
+  "files": [
+    "index.js",
+    "openapi/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "brilliant-directories",
+    "brilliantdirectories",
+    "online-directory",
+    "onlinedirectory",
+    "online-directories",
+    "onlinedirectories",
+    "api",
+    "ai-agent",
+    "agent",
+    "anthropic",
+    "automation",
+    "directory",
+    "membership",
+    "member-management",
+    "members",
+    "claude",
+    "cursor",
+    "openapi"
+  ],
+  "author": "Brilliant Directories <support@brilliantdirectories.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/brilliantdirectories/brilliant-directories-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brilliantdirectories/brilliant-directories-mcp.git",
+    "directory": "mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/brilliantdirectories/brilliant-directories-mcp/issues"
+  },
+  "scripts": {
+    "test": "node index.js --verify",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
