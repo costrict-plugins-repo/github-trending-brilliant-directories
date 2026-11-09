@@ -1,0 +1,41 @@
+node_modules/
+
+# Credentials / local env
+.env
+.env.*
+
+# Editor / tool local state (may contain tool-call caches with secrets)
+.claude/
+.cursor/
+.vscode/
+.idea/
+
+# Wrangler local state (Cloudflare account ID cache, deploy metadata)
+# Account ID is semi-public but does not belong in source control.
+.wrangler/
+
+# Internal-only working docs (dev onboarding, todo lists, etc.).
+# These live inside the folder so devs find them immediately when they
+# clone from Bitbucket, but should NEVER ship to GitHub / npm — they're
+# BD-internal guidance, not public documentation. Bitbucket's parent
+# repo DOES track them (only gitignored from the inner GitHub repo).
+INTERNAL-*.md
+INTERNAL-*/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+
+# Throwaway scratch files (verification scratchpads, test reports, etc.)
+# Delete the file itself when the work is done — gitignore is a safety net
+# to prevent accidental commit of in-progress notes that may contain
+# customer credentials or partial test data.
+SCRATCH-*.md
+SCRATCH-*.txt
+SCRATCH-*.json
+
+# Pre-edit backups created during structural rewrites. Live in the repo
+# root (NOT inside mcp/) so they cannot ride the npm `files` whitelist.
+# Delete after the rewrite ships clean. Pattern: <name>.bak-v<X.Y.Z>
+*.bak-v*
